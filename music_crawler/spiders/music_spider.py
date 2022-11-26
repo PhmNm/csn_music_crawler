@@ -1,5 +1,7 @@
 import os, re
+from datetime import datetime
 from scrapy import Request, Spider
+
 from utils import convert_accented_vietnamese_text
 
 HEADERS = {
@@ -24,24 +26,25 @@ class MusicSpiderSpider(Spider):
     allowed_domains = ['chiasenhac.com']
 
     nb_pages = 1
-    lyric_dir = 'lyrics'
-    song_dir = 'songs'
+    lyric_dir = 'data/lyrics'
+    song_dir = 'data/songs'
 
     custom_settings = {
         "CONCURRENT_REQUESTS": 5,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 5,
         # "CONCURRENT_REQUESTS_PER_IP": 3,
-        "DOWNLOAD_DELAY": 15,
+        "DOWNLOAD_DELAY": 5,
         "RANDOMIZE_DOWNLOAD_DELAY": True
     }
+    if not os.path.exists('data'):
+        os.mkdir('data')
 
     if not os.path.exists(lyric_dir):
         os.mkdir(lyric_dir)
 
     if not os.path.exists(song_dir):
         os.mkdir(song_dir)
-
-
+    
     def start_requests(self):
         authors = load_authors()
         for author in authors:
@@ -93,22 +96,26 @@ class MusicSpiderSpider(Spider):
         self.log(f'LYRIC:\n {lyric}')
         self.log(f'DOWNLOAD LINK: {download_link}')
 
-        data = {
-            'link': response.url,
-            'author':author,
-            'lyric': lyric
-        }
+        author = author.split(',')
 
-        try:
-            yield Request(
-                url=download_link,
-                callback=self.process_data,
-                dont_filter=True,
-                headers=HEADERS,
-                cb_kwargs=dict(data=data)
-            )
-        except:
-            raise Exception(f'DOWNLOAD {download_link} FAILED!!!')
+        if len(author) > 1:
+            self.log('MORE THEN 2 AUTHORS --> STOP DOWNLOAD')
+        else:
+            data = {
+                'link': response.url,
+                'author':author[0],
+                'lyric': lyric
+            }
+            try:
+                yield Request(
+                    url=download_link,
+                    callback=self.process_data,
+                    dont_filter=True,
+                    headers=HEADERS,
+                    cb_kwargs=dict(data=data)
+                )
+            except:
+                raise Exception(f'DOWNLOAD {download_link} FAILED!!!')
 
     def process_data(self, response, data):
         self.log(f"DOWNLOAD SONG {data['link']} SUCCESSFULLY!!!")
@@ -118,6 +125,8 @@ class MusicSpiderSpider(Spider):
 
         lyric_path = self.lyric_dir + '/' + name + '.txt'
         song_path = self.song_dir + '/' + name + '.m4a'
+        author = convert_accented_vietnamese_text(data['author'])
+        today = datetime.now().date()
 
         lyric = []
         for line in data['lyric']:
@@ -131,3 +140,6 @@ class MusicSpiderSpider(Spider):
         
         with open(song_path, 'wb+') as f_song:
             f_song.write(response.body)
+
+        with open(f'data/crawl_data.csv_{today}','a+', encoding='utf-8') as f_table:
+            f_table.write(f'{author},{lyric_path},{song_path}\n')
