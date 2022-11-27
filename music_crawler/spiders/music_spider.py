@@ -1,6 +1,9 @@
-import os, re
+import os
 from datetime import datetime
+import pandas as pd
+
 from scrapy import Request, Spider
+from scrapy.exceptions import CloseSpider
 
 from utils import convert_accented_vietnamese_text
 
@@ -21,20 +24,35 @@ def load_authors():
             urls.append(url.strip())
     return urls
 
+def check_valid(table_file_dir):
+    df = pd.read_csv(table_file_dir,sep=',')
+    count_df = df.groupby(df.columns[0]).count()
+    list_value = count_df[count_df.columns[1]].values
+    if all([i >= 30 for i in list_value]):
+        return True
+    return False
+
+def clean_table(table_file_dir):
+    df = pd.read_csv(table_file_dir,sep=',')
+    df = df.drop_duplicates(ignore_index=True)
+    df.to_csv(table_file_dir,sep=',',header=['author','lyric_path','song_path','crawl_date'],index=False)
+    return True
+
 class MusicSpiderSpider(Spider):
     name = 'music_spider'
     allowed_domains = ['chiasenhac.com']
 
-    nb_pages = 1
+    nb_pages = 10
+    
     lyric_dir = 'data/lyrics'
     song_dir = 'data/songs'
-
+    table_file_dir = 'data/crawl_data.csv'
     custom_settings = {
         "CONCURRENT_REQUESTS": 5,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 5,
         # "CONCURRENT_REQUESTS_PER_IP": 3,
         "DOWNLOAD_DELAY": 5,
-        "RANDOMIZE_DOWNLOAD_DELAY": True
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
     }
     if not os.path.exists('data'):
         os.mkdir('data')
@@ -45,6 +63,10 @@ class MusicSpiderSpider(Spider):
     if not os.path.exists(song_dir):
         os.mkdir(song_dir)
     
+    if not os.path.exists(table_file_dir):
+        with open(table_file_dir, 'w+') as f_table:
+            f_table.write('author,lyric_path,song_path,crawl_date')
+
     def start_requests(self):
         authors = load_authors()
         for author in authors:
@@ -61,6 +83,9 @@ class MusicSpiderSpider(Spider):
                 )
 
     def parse_search_page(self, response):
+        if check_valid(self.table_file_dir):
+            CloseSpider("NUMBER OF DATA REACHED!!!!")
+
         if response.status != 200:
             yield {
                 'status_code': response.status,
@@ -84,6 +109,7 @@ class MusicSpiderSpider(Spider):
                     )
 
     def parse_data(self, response):
+
         download_xpath = '//*[@id="pills-download"]/div/div[2]/div/div[1]/ul/li[1]/a/@href'
         author_xpath = '/html/body/section/div[3]/div/div[1]/div[3]/div[1]/div/div[2]/ul/li[2]/a/text()'
         lyric_xpath = '//div[@id="fulllyric"]/text()'
@@ -141,5 +167,8 @@ class MusicSpiderSpider(Spider):
         with open(song_path, 'wb+') as f_song:
             f_song.write(response.body)
 
-        with open(f'data/crawl_data.csv_{today}','a+', encoding='utf-8') as f_table:
-            f_table.write(f'{author},{lyric_path},{song_path}\n')
+        with open(f'{self.table_file_dir}','a+', encoding='utf-8') as f_table:
+            f_table.write(f'{author},{lyric_path},{song_path},{today}\n')
+        
+        res = clean_table(self.table_file_dir)
+        self.log(f'CLEAN RESULT: {res}')
