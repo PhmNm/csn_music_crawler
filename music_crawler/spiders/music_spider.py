@@ -14,7 +14,8 @@ HEADERS = {
 
 EXCLUDE_KEYWORDS = [
     'edm','remix','version','ver','cover','intro',
-    'beat','lien-khuc','mix','live','auto-tune'
+    'beat','lien-khuc','mix','live','auto-tune',
+    'lofi','karaoke'
 ]
 
 def load_authors():
@@ -24,18 +25,30 @@ def load_authors():
             urls.append(url.strip())
     return urls
 
-def check_valid(table_file_dir):
+def check_valid_author(author: str):
+    author_split = author.split(',')
+    if len(author_split) == 1:
+        author_split = author.split(';')
+    if len(author_split) == 1:
+        author_split = author.split('-')
+    if len(author_split) == 1:
+        author_split = author.split('/')
+    if len(author_split) == 1:
+        return True
+    else: return False
+
+def check_enough_data(table_file_dir):
     df = pd.read_csv(table_file_dir,sep=',')
     count_df = df.groupby(df.columns[0]).count()
     list_value = count_df[count_df.columns[1]].values
-    if all([i >= 30 for i in list_value]):
+    if sum([i >= 30 for i in list_value]) >= 10:
         return True
     return False
 
 def clean_table(table_file_dir):
     df = pd.read_csv(table_file_dir,sep=',')
     df = df.drop_duplicates(ignore_index=True)
-    df.to_csv(table_file_dir,sep=',',header=['author','lyric_path','song_path','crawl_date'],index=False)
+    df.to_csv(table_file_dir,sep=',',header=['author','lyric_path','audio_path','crawl_date'],index=False)
     return True
 
 class MusicSpiderSpider(Spider):
@@ -45,7 +58,7 @@ class MusicSpiderSpider(Spider):
     nb_pages = 10
     
     lyric_dir = 'data/lyrics'
-    song_dir = 'data/songs'
+    audio_dir = 'data/audios'
     table_file_dir = 'data/crawl_data.csv'
     custom_settings = {
         "CONCURRENT_REQUESTS": 5,
@@ -60,12 +73,12 @@ class MusicSpiderSpider(Spider):
     if not os.path.exists(lyric_dir):
         os.mkdir(lyric_dir)
 
-    if not os.path.exists(song_dir):
-        os.mkdir(song_dir)
+    if not os.path.exists(audio_dir):
+        os.mkdir(audio_dir)
     
     if not os.path.exists(table_file_dir):
         with open(table_file_dir, 'w+') as f_table:
-            f_table.write('author,lyric_path,song_path,crawl_date')
+            f_table.write('author,lyric_path,audio_path,crawl_date')
 
     def start_requests(self):
         authors = load_authors()
@@ -78,12 +91,11 @@ class MusicSpiderSpider(Spider):
                 yield Request(
                     url=url,
                     callback=self.parse_search_page,
-                    dont_filter=True,
                     headers=HEADERS
                 )
 
     def parse_search_page(self, response):
-        if check_valid(self.table_file_dir):
+        if check_enough_data(self.table_file_dir):
             CloseSpider("NUMBER OF DATA REACHED!!!!")
 
         if response.status != 200:
@@ -98,13 +110,12 @@ class MusicSpiderSpider(Spider):
             song_items = response.xpath(href_xpath).getall()
             for index, url in enumerate(song_items):
                 self.log(f'URL number: {index} ---- LINKS: {url}')
-                if any([i in response.url for i in EXCLUDE_KEYWORDS]):
-                    self.log(f'DETECTED EXLCLUDE KEYWORD')
+                if any([i in url for i in EXCLUDE_KEYWORDS]):
+                    self.log('DETECTED EXLCLUDE KEYWORD')
                 else:
                     yield Request(
                         url=url,
                         callback=self.parse_data,
-                        dont_filter=True,
                         headers=HEADERS
                     )
 
@@ -122,21 +133,18 @@ class MusicSpiderSpider(Spider):
         self.log(f'LYRIC:\n {lyric}')
         self.log(f'DOWNLOAD LINK: {download_link}')
 
-        author = author.split(',')
-
-        if len(author) > 1:
+        if not check_valid_author(author):
             self.log('MORE THEN 2 AUTHORS --> STOP DOWNLOAD')
         else:
             data = {
                 'link': response.url,
-                'author':author[0],
+                'author':author,
                 'lyric': lyric
             }
             try:
                 yield Request(
                     url=download_link,
                     callback=self.process_data,
-                    dont_filter=True,
                     headers=HEADERS,
                     cb_kwargs=dict(data=data)
                 )
@@ -150,7 +158,7 @@ class MusicSpiderSpider(Spider):
         self.log(f'NAME EXTACTED: {name}')
 
         lyric_path = self.lyric_dir + '/' + name + '.txt'
-        song_path = self.song_dir + '/' + name + '.m4a'
+        audio_path = self.audio_dir + '/' + name + '.m4a'
         author = convert_accented_vietnamese_text(data['author'])
         today = datetime.now().date()
 
@@ -164,11 +172,11 @@ class MusicSpiderSpider(Spider):
         with open(lyric_path, 'w+') as f_lyric:
             f_lyric.write(' '.join(lyric))
         
-        with open(song_path, 'wb+') as f_song:
+        with open(audio_path, 'wb+') as f_song:
             f_song.write(response.body)
 
         with open(f'{self.table_file_dir}','a+', encoding='utf-8') as f_table:
-            f_table.write(f'{author},{lyric_path},{song_path},{today}\n')
+            f_table.write(f'{author},{lyric_path},{audio_path},{today}\n')
         
         res = clean_table(self.table_file_dir)
         self.log(f'CLEAN RESULT: {res}')
