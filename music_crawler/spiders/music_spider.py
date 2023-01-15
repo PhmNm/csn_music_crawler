@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 import pandas as pd
 
-from scrapy import Request, Spider
+from scrapy import FormRequest, Request, Spider
 from scrapy.exceptions import CloseSpider
 
 from utils import convert_accented_vietnamese_text
@@ -19,11 +19,11 @@ EXCLUDE_KEYWORDS = [
 ]
 
 def load_authors():
-    urls = []
-    with open('authors.txt','r', encoding='utf-8') as f:
-        for url in f.readlines():
-            urls.append(url.strip())
-    return urls
+    names = []
+    with open('authors_2.txt','r', encoding='utf-8') as f:
+        for name in f.readlines():
+            names.append(name.strip())
+    return names
 
 def check_valid_author(author: str):
     author_split = author.split(',')
@@ -54,9 +54,10 @@ def clean_table(table_file_dir):
 class MusicSpiderSpider(Spider):
     name = 'music_spider'
     allowed_domains = ['chiasenhac.com']
-
-    nb_pages = 10
-    
+    usn = 'nampham'
+    psw = 'chiasenhac'
+    nb_pages = 1
+    handle_httpstatus_list = [405]
     lyric_dir = 'data/lyrics'
     audio_dir = 'data/audios'
     table_file_dir = 'data/crawl_data.csv'
@@ -64,7 +65,7 @@ class MusicSpiderSpider(Spider):
         "CONCURRENT_REQUESTS": 5,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 5,
         # "CONCURRENT_REQUESTS_PER_IP": 3,
-        "DOWNLOAD_DELAY": 5,
+        "DOWNLOAD_DELAY": 10,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
     }
     if not os.path.exists('data'):
@@ -80,7 +81,26 @@ class MusicSpiderSpider(Spider):
         with open(table_file_dir, 'w+') as f_table:
             f_table.write('author,lyric_path,audio_path,crawl_date')
 
+    # def start_requests(self):
+    #     home_url = 'https://chiasenhac.vn/'
+    #     yield Request(
+    #         url=home_url,
+    #         headers=HEADERS,
+    #         callback=self.start_login
+    #     )
     def start_requests(self):
+        login_url = 'https://chiasenhac.vn/'
+        yield FormRequest(
+            url=login_url,
+            formdata={'email': self.usn, 'password': self.psw},
+            dont_filter=True,
+            headers=HEADERS,
+            callback=self.start_search_page
+        )
+        
+    def start_search_page(self, response):
+        # self.log(f"CODE {response.status}")
+        headers = response.headers
         authors = load_authors()
         for author in authors:
             for page in range(self.nb_pages):
@@ -90,8 +110,9 @@ class MusicSpiderSpider(Spider):
                 url = begin_url + author + tail_url
                 yield Request(
                     url=url,
+                    dont_filter=True,
                     callback=self.parse_search_page,
-                    headers=HEADERS
+                    headers=headers
                 )
 
     def parse_search_page(self, response):
@@ -105,6 +126,7 @@ class MusicSpiderSpider(Spider):
                 'url': response.url
             }
         else:
+            headers = response.headers
             self.log(f'REQUEST {response.url} SUCCESSFULLY!!')
             href_xpath = '//p[@class="media-title mt-0 mb-0"]/a[@class="search_title"]/@href'
             song_items = response.xpath(href_xpath).getall()
@@ -113,14 +135,15 @@ class MusicSpiderSpider(Spider):
                 if any([i in url for i in EXCLUDE_KEYWORDS]):
                     self.log('DETECTED EXLCLUDE KEYWORD')
                 else:
+                    self.log('START RETRIEVE DATA!!!')
                     yield Request(
                         url=url,
                         callback=self.parse_data,
-                        headers=HEADERS
+                        dont_filter=True,
+                        headers=headers
                     )
 
     def parse_data(self, response):
-
         download_xpath = '//*[@id="pills-download"]/div/div[2]/div/div[1]/ul/li[1]/a/@href'
         author_xpath = '/html/body/section/div[3]/div/div[1]/div[3]/div[1]/div/div[2]/ul/li[2]/a/text()'
         lyric_xpath = '//div[@id="fulllyric"]/text()'
