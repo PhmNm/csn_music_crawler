@@ -48,7 +48,7 @@ def check_enough_data(table_file_dir):
 def clean_table(table_file_dir):
     df = pd.read_csv(table_file_dir,sep=',')
     df = df.drop_duplicates(ignore_index=True)
-    df.to_csv(table_file_dir,sep=',',header=['author','lyric_path','audio_path','crawl_date'],index=False)
+    df.to_csv(table_file_dir,sep=',',header=['author','lyric','audio_path','crawl_date'],index=False)
     return True
 
 class MusicSpiderSpider(Spider):
@@ -56,9 +56,8 @@ class MusicSpiderSpider(Spider):
     allowed_domains = ['chiasenhac.com']
     usn = 'nampham'
     psw = 'chiasenhac'
-    nb_pages = 1
+    nb_pages = 5
     handle_httpstatus_list = [405]
-    lyric_dir = 'data/lyrics'
     audio_dir = 'data/audios'
     table_file_dir = 'data/crawl_data.csv'
     custom_settings = {
@@ -71,15 +70,12 @@ class MusicSpiderSpider(Spider):
     if not os.path.exists('data'):
         os.mkdir('data')
 
-    if not os.path.exists(lyric_dir):
-        os.mkdir(lyric_dir)
-
     if not os.path.exists(audio_dir):
         os.mkdir(audio_dir)
     
     if not os.path.exists(table_file_dir):
         with open(table_file_dir, 'w+') as f_table:
-            f_table.write('author,lyric_path,audio_path,crawl_date\n')
+            f_table.write('author,lyric,audio_path,crawl_date\n')
 
     # def start_requests(self):
     #     home_url = 'https://chiasenhac.vn/'
@@ -181,26 +177,26 @@ class MusicSpiderSpider(Spider):
         name = data['link'].split('/')[-1].replace('.html','')
         self.log(f'NAME EXTACTED: {name}')
 
-        lyric_path = self.lyric_dir + '/' + name + '.txt'
+        # lyric_path = self.lyric_dir + '/' + name + '.txt'
         audio_path = self.audio_dir + '/' + name + '.m4a'
         author = convert_accented_vietnamese_text(data['author'])
         today = datetime.now().date()
 
-        lyric = []
+        lyrics = []
         for line in data['lyric']:
             line = line.strip()
             # line = convert_accented_vietnamese_text(line) // để có dấu nhét vào model, preprocess sẽ tính sau
             if line != '':
-                lyric.append(line)
-
-        with open(lyric_path, 'w+') as f_lyric:
-            f_lyric.write(' '.join(lyric))
+                lyrics.append(line)
+        lyric = ' '.join(lyrics)
+        # with open(lyric_path, 'w+') as f_lyric:
+        #     f_lyric.write(' '.join(lyrics))
         
         with open(audio_path, 'wb+') as f_song:
             f_song.write(response.body)
 
         with open(f'{self.table_file_dir}','a+', encoding='utf-8') as f_table:
-            f_table.write(f'{author},{lyric_path},{audio_path},{today}\n')
+            f_table.write(f'{author},{lyric},{audio_path},{today}\n')
         
         res = clean_table(self.table_file_dir)
         self.log(f'CLEAN RESULT: {res}')
