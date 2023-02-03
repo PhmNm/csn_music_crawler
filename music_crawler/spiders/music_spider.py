@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 import pandas as pd
-
+from bs4 import BeautifulSoup
 from scrapy import FormRequest, Request, Spider
 from scrapy.exceptions import CloseSpider
 
@@ -65,7 +65,7 @@ class MusicSpiderSpider(Spider):
         "CONCURRENT_REQUESTS": 5,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 5,
         # "CONCURRENT_REQUESTS_PER_IP": 3,
-        "DOWNLOAD_DELAY": 10,
+        "DOWNLOAD_DELAY": 5,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
     }
     if not os.path.exists('data'):
@@ -79,7 +79,7 @@ class MusicSpiderSpider(Spider):
     
     if not os.path.exists(table_file_dir):
         with open(table_file_dir, 'w+') as f_table:
-            f_table.write('author,lyric_path,audio_path,crawl_date')
+            f_table.write('author,lyric_path,audio_path,crawl_date\n')
 
     # def start_requests(self):
     #     home_url = 'https://chiasenhac.vn/'
@@ -144,10 +144,11 @@ class MusicSpiderSpider(Spider):
                     )
 
     def parse_data(self, response):
+        # soup = BeautifulSoup(response.text, 'html.parser')
         download_xpath = '//*[@id="pills-download"]/div/div[2]/div/div[1]/ul/li[1]/a/@href'
+        # download_xpath = soup.find_all('a','download_item')
         author_xpath = '/html/body/section/div[3]/div/div[1]/div[3]/div[1]/div/div[2]/ul/li[2]/a/text()'
         lyric_xpath = '//div[@id="fulllyric"]/text()'
-
         author = response.xpath(author_xpath).get()
         download_link = response.xpath(download_xpath).get()
         lyric = response.xpath(lyric_xpath).getall()
@@ -188,7 +189,7 @@ class MusicSpiderSpider(Spider):
         lyric = []
         for line in data['lyric']:
             line = line.strip()
-            line = convert_accented_vietnamese_text(line)
+            # line = convert_accented_vietnamese_text(line) // để có dấu nhét vào model, preprocess sẽ tính sau
             if line != '':
                 lyric.append(line)
 
