@@ -59,7 +59,7 @@ class MusicSpiderSpider(Spider):
     nb_pages = 1
     handle_httpstatus_list = [405]
     audio_dir = 'data/audios'
-    table_file_dir = 'data/crawl_data.csv'
+    table_file_dir = 'crawl_data.csv'
     custom_settings = {
         "CONCURRENT_REQUESTS": 5,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 5,
