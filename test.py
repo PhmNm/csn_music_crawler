@@ -1,3 +1,3 @@
-a = 123
-if type(a) == int:
-    print('côr')
+import pandas as pd
+df = pd.read_csv('data/crawl_data.csv')
+print(df.head())

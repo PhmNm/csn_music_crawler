@@ -56,7 +56,7 @@ class MusicSpiderSpider(Spider):
     allowed_domains = ['chiasenhac.com']
     usn = 'nampham'
     psw = 'chiasenhac'
-    nb_pages = 5
+    nb_pages = 1
     handle_httpstatus_list = [405]
     audio_dir = 'data/audios'
     table_file_dir = 'data/crawl_data.csv'
@@ -184,7 +184,8 @@ class MusicSpiderSpider(Spider):
 
         lyrics = []
         for line in data['lyric']:
-            line = line.strip()
+            line = line.strip().lower()
+            line = line.replace(',','')
             # line = convert_accented_vietnamese_text(line) // để có dấu nhét vào model, preprocess sẽ tính sau
             if line != '':
                 lyrics.append(line)
