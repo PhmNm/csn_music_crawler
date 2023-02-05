@@ -47,16 +47,22 @@ def check_enough_data(table_file_dir):
 
 def clean_table(table_file_dir):
     df = pd.read_csv(table_file_dir,sep=',')
+    old_shape = df.shape
+
     df = df.drop_duplicates(ignore_index=True)
+    new_shape = df.shape
     df.to_csv(table_file_dir,sep=',',header=['author','lyric','audio_path','crawl_date'],index=False)
-    return True
+    if old_shape != new_shape:
+        return True
+    else:
+        return False
 
 class MusicSpiderSpider(Spider):
     name = 'music_spider'
     allowed_domains = ['chiasenhac.com']
     usn = 'nampham'
     psw = 'chiasenhac'
-    nb_pages = 1
+    nb_pages = 2
     handle_httpstatus_list = [405]
     audio_dir = 'data/audios'
     table_file_dir = 'crawl_data.csv'
@@ -179,7 +185,7 @@ class MusicSpiderSpider(Spider):
 
         # lyric_path = self.lyric_dir + '/' + name + '.txt'
         audio_path = self.audio_dir + '/' + name + '.m4a'
-        author = convert_accented_vietnamese_text(data['author'])
+        author = data['author'].lower()
         today = datetime.now().date()
 
         lyrics = []
@@ -192,12 +198,16 @@ class MusicSpiderSpider(Spider):
         lyric = ' '.join(lyrics)
         # with open(lyric_path, 'w+') as f_lyric:
         #     f_lyric.write(' '.join(lyrics))
-        
-        with open(audio_path, 'wb+') as f_song:
-            f_song.write(response.body)
+        if lyric != '' and response.body != b'':
 
-        with open(f'{self.table_file_dir}','a+', encoding='utf-8') as f_table:
-            f_table.write(f'{author},{lyric},{audio_path},{today}\n')
+            with open(audio_path, 'wb+') as f_song:
+                f_song.write(response.body)
+
+            with open(f'{self.table_file_dir}','a+', encoding='utf-8') as f_table:
+                f_table.write(f'{author},{lyric},{audio_path},{today}\n')
         
         res = clean_table(self.table_file_dir)
-        self.log(f'CLEAN RESULT: {res}')
+        if res:
+            self.log(f'CLEAN RESULT: {res}')
+        else:
+            self.log(f'NOTHING CHANGE')
