@@ -45,13 +45,20 @@ def check_enough_data(table_file_dir):
         return True
     return False
 
+def check_exist_data(table_file_dir, name):
+    df = pd.read_csv(table_file_dir)
+    df = df[df['name'] == name]
+    if df.shape[0] == 0:
+        return False
+    return True
+
 def clean_table(table_file_dir):
     df = pd.read_csv(table_file_dir,sep=',')
     old_shape = df.shape
 
     df = df.drop_duplicates(ignore_index=True)
     new_shape = df.shape
-    df.to_csv(table_file_dir,sep=',',header=['author','lyric','audio_path','crawl_date'],index=False)
+    df.to_csv(table_file_dir,sep=',',header=['author','name','lyric','audio_path','crawl_date'],index=False)
     if old_shape != new_shape:
         return True
     else:
@@ -62,7 +69,7 @@ class MusicSpiderSpider(Spider):
     allowed_domains = ['chiasenhac.com']
     usn = 'nampham'
     psw = 'chiasenhac'
-    nb_pages = 2
+    pages = 3
     handle_httpstatus_list = [405]
     audio_dir = 'data/audios'
     table_file_dir = 'crawl_data.csv'
@@ -81,7 +88,7 @@ class MusicSpiderSpider(Spider):
     
     if not os.path.exists(table_file_dir):
         with open(table_file_dir, 'w+') as f_table:
-            f_table.write('author,lyric,audio_path,crawl_date\n')
+            f_table.write('author,name,lyric,audio_path,crawl_date\n')
 
     # def start_requests(self):
     #     home_url = 'https://chiasenhac.vn/'
@@ -105,7 +112,7 @@ class MusicSpiderSpider(Spider):
         headers = response.headers
         authors = load_authors()
         for author in authors:
-            for page in range(self.nb_pages):
+            for page in range(self.pages):
                 self.log(f'CRAWLS MUSIC FROM AUTHOR: {author} ---- PAGE: {page + 1}')
                 begin_url = 'https://chiasenhac.vn/tim-kiem?q='
                 tail_url = f'&page_music={page + 1}&filter=sang-tac'
@@ -147,14 +154,18 @@ class MusicSpiderSpider(Spider):
 
     def parse_data(self, response):
         # soup = BeautifulSoup(response.text, 'html.parser')
-        download_xpath = '//*[@id="pills-download"]/div/div[2]/div/div[1]/ul/li[1]/a/@href'
+        name_xpath = '/html/body/section/div[3]/div/div[1]/div[3]/div[1]/div/div[2]/h2/text()'
         # download_xpath = soup.find_all('a','download_item')
         author_xpath = '/html/body/section/div[3]/div/div[1]/div[3]/div[1]/div/div[2]/ul/li[2]/a/text()'
         lyric_xpath = '//div[@id="fulllyric"]/text()'
-        author = response.xpath(author_xpath).get()
-        download_link = response.xpath(download_xpath).get()
-        lyric = response.xpath(lyric_xpath).getall()
+        download_xpath = '//*[@id="pills-download"]/div/div[2]/div/div[1]/ul/li[1]/a/@href'
 
+        name = response.xpath(name_xpath).get()
+        author = response.xpath(author_xpath).get()
+        lyric = response.xpath(lyric_xpath).getall()
+        download_link = response.xpath(download_xpath).get()
+
+        self.log(f'NAME: {name}')
         self.log(f'AUTHOR: {author}')
         self.log(f'LYRIC:\n {lyric}')
         self.log(f'DOWNLOAD LINK: {download_link}')
@@ -163,9 +174,10 @@ class MusicSpiderSpider(Spider):
             self.log('MORE THEN 2 AUTHORS --> STOP DOWNLOAD')
         else:
             data = {
-                'link': response.url,
+                'name': name,
                 'author':author,
-                'lyric': lyric
+                'lyric': lyric,
+                'link': download_link
             }
             try:
                 yield Request(
@@ -180,11 +192,12 @@ class MusicSpiderSpider(Spider):
     def process_data(self, response, data):
         self.log(f"DOWNLOAD SONG {data['link']} SUCCESSFULLY!!!")
 
-        name = data['link'].split('/')[-1].replace('.html','')
-        self.log(f'NAME EXTACTED: {name}')
+        file_name = data['link'].split('/')[-1].replace('.html','')
+        self.log(f'NAME EXTRACTED: {file_name}')
 
         # lyric_path = self.lyric_dir + '/' + name + '.txt'
-        audio_path = self.audio_dir + '/' + name + '.m4a'
+        audio_path = self.audio_dir + '/' + file_name + '.m4a'
+        name = data['name'].lower()
         author = data['author'].lower()
         today = datetime.now().date()
 
@@ -198,16 +211,19 @@ class MusicSpiderSpider(Spider):
         lyric = ' '.join(lyrics)
         # with open(lyric_path, 'w+') as f_lyric:
         #     f_lyric.write(' '.join(lyrics))
-        if lyric != '' and response.body != b'':
+        if check_exist_data(self.table_file_dir, name):
+            self.log('SONG EXISTED --> STOP SAVING')
+
+        elif lyric and response.body:
 
             with open(audio_path, 'wb+') as f_song:
                 f_song.write(response.body)
 
             with open(f'{self.table_file_dir}','a+', encoding='utf-8') as f_table:
-                f_table.write(f'{author},{lyric},{audio_path},{today}\n')
+                f_table.write(f'{author},{name},{lyric},{audio_path},{today}\n')
         
-        res = clean_table(self.table_file_dir)
-        if res:
-            self.log(f'CLEAN RESULT: {res}')
-        else:
-            self.log(f'NOTHING CHANGE')
+            res = clean_table(self.table_file_dir)
+            if res:
+                self.log(f'CLEAN RESULT: {res}')
+            else:
+                self.log(f'NOTHING CHANGE')
