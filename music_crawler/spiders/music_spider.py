@@ -15,17 +15,18 @@ HEADERS = {
 EXCLUDE_KEYWORDS = [
     'edm','remix','version','ver','cover','intro',
     'beat','lien-khuc','mix','live','auto-tune',
-    'lofi','karaoke'
+    'lofi','karaoke', 'nonstop'
 ]
 
 def load_authors():
     names = []
-    with open('authors_2.txt','r', encoding='utf-8') as f:
+    with open('authors_vip.txt','r', encoding='utf-8') as f:
         for name in f.readlines():
-            names.append(name.strip())
+            name = name.strip()
+            names.append(name.lower())
     return names
 
-def check_valid_author(author: str):
+def check_valid_author(author: str, valid_names: list):
     author_split = author.split(',')
     if len(author_split) == 1:
         author_split = author.split(';')
@@ -34,14 +35,14 @@ def check_valid_author(author: str):
     if len(author_split) == 1:
         author_split = author.split('/')
     if len(author_split) == 1:
-        return True
+        if author_split[0].lower() in valid_names:
+            return True
     else: return False
 
-def check_enough_data(table_file_dir):
-    df = pd.read_csv(table_file_dir,sep=',')
-    count_df = df.groupby(df.columns[0]).count()
-    list_value = count_df[count_df.columns[1]].values
-    if sum([i >= 30 for i in list_value]) >= 10:
+def check_enough_data(table_file_dir, author):
+    df = pd.read_csv(table_file_dir)
+    count_value = (df['author'] == author).sum()
+    if count_value >= 50:
         return True
     return False
 
@@ -69,7 +70,7 @@ class MusicSpiderSpider(Spider):
     allowed_domains = ['chiasenhac.com']
     usn = 'nampham'
     psw = 'chiasenhac'
-    pages = 3
+    pages = 20
     handle_httpstatus_list = [405]
     audio_dir = 'data/audios'
     table_file_dir = 'crawl_data.csv'
@@ -77,7 +78,7 @@ class MusicSpiderSpider(Spider):
         "CONCURRENT_REQUESTS": 5,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 5,
         # "CONCURRENT_REQUESTS_PER_IP": 3,
-        "DOWNLOAD_DELAY": 5,
+        "DOWNLOAD_DELAY": 1,
         "RANDOMIZE_DOWNLOAD_DELAY": True,
     }
     if not os.path.exists('data'):
@@ -111,6 +112,7 @@ class MusicSpiderSpider(Spider):
         # self.log(f"CODE {response.status}")
         headers = response.headers
         authors = load_authors()
+        self.authors = authors
         for author in authors:
             for page in range(self.pages):
                 self.log(f'CRAWLS MUSIC FROM AUTHOR: {author} ---- PAGE: {page + 1}')
@@ -125,8 +127,8 @@ class MusicSpiderSpider(Spider):
                 )
 
     def parse_search_page(self, response):
-        if check_enough_data(self.table_file_dir):
-            CloseSpider("NUMBER OF DATA REACHED!!!!")
+        # if check_enough_data(self.table_file_dir):
+        #     CloseSpider("NUMBER OF DATA REACHED!!!!")
 
         if response.status != 200:
             yield {
@@ -170,8 +172,8 @@ class MusicSpiderSpider(Spider):
         self.log(f'LYRIC:\n {lyric}')
         self.log(f'DOWNLOAD LINK: {download_link}')
 
-        if not check_valid_author(author):
-            self.log('MORE THEN 2 AUTHORS --> STOP DOWNLOAD')
+        if not check_valid_author(author, self.authors):
+            self.log('INVALID AUTHOR --> STOP DOWNLOAD')
         else:
             data = {
                 'name': name,
@@ -196,8 +198,8 @@ class MusicSpiderSpider(Spider):
         self.log(f'NAME EXTRACTED: {file_name}')
 
         # lyric_path = self.lyric_dir + '/' + name + '.txt'
-        audio_path = self.audio_dir + '/' + file_name + '.m4a'
-        name = data['name'].lower()
+        audio_path = self.audio_dir + '/' + file_name
+        name = data['name'].lower().replace(',','')
         author = data['author'].lower()
         today = datetime.now().date()
 
@@ -213,9 +215,9 @@ class MusicSpiderSpider(Spider):
         #     f_lyric.write(' '.join(lyrics))
         if check_exist_data(self.table_file_dir, name):
             self.log('SONG EXISTED --> STOP SAVING')
-
+        elif check_enough_data(self.table_file_dir, author):
+            self.log(f'{author} REACHS LIMIT DATA --> STOP DOWNLOAD')
         elif lyric and response.body:
-
             with open(audio_path, 'wb+') as f_song:
                 f_song.write(response.body)
 

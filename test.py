@@ -1,10 +1,7 @@
 import pandas as pd
-table_file_dir = 'crawl_data.csv'
-def check_exist_data(table_file_dir, name):
-    df = pd.read_csv(table_file_dir)
-    df = df[df['name'] == name]
-    if df.shape[0] == 0:
-        return False
-    return True
-
-print(check_exist_data(table_file_dir, 'từ bỏ'))
+import numpy as np
+df = pd.read_csv('crawl_data3.csv')
+headers = ['author','name','lyric','audio_path','crawl_date']
+i_0 = df['audio_path'].convert_dtypes()[0]
+a = np.array(i_0)
+print(a[0])
