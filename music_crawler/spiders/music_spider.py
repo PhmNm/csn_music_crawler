@@ -96,7 +96,7 @@ class MusicSpiderSpider(Spider):
     #     yield Request(
     #         url=home_url,
     #         headers=HEADERS,
-    #         callback=self.start_login
+    #         callback=self.start_search_page
     #     )
     def start_requests(self):
         login_url = 'https://chiasenhac.vn/'
